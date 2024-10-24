@@ -52,11 +52,18 @@ const evJsmodi = queryObject.evalScriptmodi
 const evUrlori = queryObject.evalUrlori
 const evUrlmodi = queryObject.evalUrlmodi
 
+const prepend = queryObject.prepend
+const scEvJsori = queryObject.evJsori
+const scEvJsmodi = queryObject.evJsmodi
+const scEvUrlori = queryObject.evUrlori
+const scEvUrlmodi = queryObject.evUrlmodi
+
 let noNtf = queryObject.noNtf ? istrue(queryObject.noNtf) : false //默认开启通知
 
 let localsetNtf = $.lodash_get(arg, 'Notify') || $.getval('ScriptHub通知') || ''
 noNtf = localsetNtf == '开启通知' ? false : localsetNtf == '关闭通知' ? true : noNtf
 
+let jqEnabled = istrue(queryObject.jqEnabled)
 let openMsgHtml = istrue(queryObject.openMsgHtml)
 
 noNtf = openMsgHtml ? true : noNtf
@@ -97,7 +104,11 @@ let sufkeepHeader = keepHeader == true ? '&keepHeader=true' : '' //用于保留h
 let sufjsDelivr = jsDelivr == true ? '&jsDelivr=true' : '' //用于开启jsDeliver的后缀
 
 //用于自定义发送请求的请求头
-const reqHeaders = { headers: {} }
+const reqHeaders = {
+  headers: {
+    'User-Agent': 'script-hub/1.0.0',
+  },
+}
 
 if (queryObject.headers) {
   decodeURIComponent(queryObject.headers)
@@ -321,7 +332,7 @@ if (binaryInfo != null && binaryInfo.length > 0) {
 
   if (bodyRewrite) {
     for await (let [y, x] of bodyRewrite.match(/[^\r\n]+/g).entries()) {
-      const [_, type, regex, value] = x.match(/^(http-request|http-response)\s+?(.*?)\s+?(.*?)$/)
+      const [_, type, regex, value] = x.match(/^((?:http-request|http-response)(?:-jq)?)\s+?(.*?)\s+?(.*?)$/)
       rwbodyBox.push({ type, regex, value })
     }
   }
@@ -383,8 +394,8 @@ if (binaryInfo != null && binaryInfo.length > 0) {
             break
           } else if (/^(AND|OR|NOT)\s*?,/i.test(x)) {
             x = x.replace(
-              /\(\s*?((DOMAIN(-\w+)?|RULE-SET|URL-REGEX)\s*?,\s*?((?!,\s*?extended-matching\s*?(,|\))).)+?\s*?)\)/g,
-              '($1,extended-matching)'
+              /(\(\s*?(?:DOMAIN(?:-\w+)?|RULE-SET|URL-REGEX)\s*?,\s*?(?:(?!,\s*?extended-matching\s*?(?:,|\))).)+?\s*?)(\)\s*?,|\)\s*?\)\s*?,)/g,
+              '$1,extended-matching$2'
             )
             break
           }
@@ -419,7 +430,7 @@ if (binaryInfo != null && binaryInfo.length > 0) {
             x = x + ',pre-matching'
             break
           } else if (/^(AND|OR|NOT)\s*?,/i.test(x)) {
-            const pre_matching_regex = /\(\s*?(((?!(AND|NOT|OR))(\w|-))+?)\s*?,\s*?.+?\s*?\)/g
+            const pre_matching_regex = /\(\s*?(((?!(AND|NOT|OR))(\w|-))+?)\s*?,\s*?.+?\s*?(\)\s*?,|\)\s*?\)\s*?,)/g
             let not_matched = false
             while ((matched = pre_matching_regex.exec(x))) {
               if (
@@ -445,8 +456,8 @@ if (binaryInfo != null && binaryInfo.length > 0) {
         x = x + ',no-resolve'
       } else if (/^(AND|OR|NOT)\s*?,/i.test(x)) {
         x = x.replace(
-          /\(\s*?((IP(-\w+)?|RULE-SET|GEOIP)\s*?,\s*?((?!,\s*?no-resolve\s*?(,|\))).)+?\s*?)\)/g,
-          '($1,no-resolve)'
+          /(\(\s*?(?:IP(?:-\w+)?|RULE-SET|GEOIP)\s*?,\s*?(?:(?!,\s*?no-resolve\s*?(?:,|\))).)+?\s*?)(\)\s*?,|\)\s*?\)\s*?,)/g,
+          '$1,no-resolve$2'
         )
       }
     } //增加ip规则不解析域名结束
@@ -474,6 +485,21 @@ if (binaryInfo != null && binaryInfo.length > 0) {
 
     if (compatibilityOnly == true && (jscStatus == true || jsc2Status == true)) {
       jsSuf = jsSuf + '&compatibilityOnly=true'
+    }
+    if (prepend && (jscStatus == true || jsc2Status == true)) {
+      jsSuf = jsSuf + `&prepend=${encodeURIComponent(prepend)}`
+    }
+    if (scEvJsori && (jscStatus == true || jsc2Status == true)) {
+      jsSuf = jsSuf + `&evalScriptori=${encodeURIComponent(scEvJsori)}`
+    }
+    if (scEvJsmodi && (jscStatus == true || jsc2Status == true)) {
+      jsSuf = jsSuf + `&evalScriptmodi=${encodeURIComponent(scEvJsmodi)}`
+    }
+    if (scEvUrlori && (jscStatus == true || jsc2Status == true)) {
+      jsSuf = jsSuf + `&evalUrlori=${encodeURIComponent(scEvUrlori)}`
+    }
+    if (scEvUrlmodi && (jscStatus == true || jsc2Status == true)) {
+      jsSuf = jsSuf + `&evalUrlmodi=${encodeURIComponent(scEvUrlmodi)}`
     }
 
     //模块信息
@@ -516,27 +542,10 @@ if (binaryInfo != null && binaryInfo.length > 0) {
       rw_redirect(x, mark)
     }
 
-    // Loon body rewrite 解析 不用这个 因为需要合并到一个脚本中对一个请求/响应进行多个操作
-    // if (/\s((request|response)-body-replace-regex)\s/.test(x)) {
-    //   let [_, regex, __, type, suffix] = x.match(/^(.*?)\s+?((request|response)-body-replace-regex)\s+?(.*?)\s*$/)
-    //   type = `http-${type}`
-    //   const suffixArray = suffix.split(/\s+/)
-    //   const newSuffixArray = []
-    //   for (let index = 0; index < suffixArray.length; index += 2) {
-    //     const key = suffixArray[index]
-    //     const value = suffixArray[index + 1]
-
-    //     if (value != null) {
-    //       newSuffixArray.push(
-    //         `${/\\x20/.test(key) ? `"${key.replace(/\\x20/g, ' ')}"` : key} ${
-    //           /\\x20/.test(value) ? `"${value.replace(/\\x20/g, ' ')}"` : value
-    //         }`
-    //       )
-    //     }
-    //   }
-
-    //   rwbodyBox.push({ type, regex, value: newSuffixArray.join(' ') })
-    // }
+    if (/\s((request|response)-body-json-jq)\s/.test(x) && jqEnabled && isSurgeiOS) {
+      const [_, regex, type, value] = x.match(/^(.*?)\s+?(?:(request|response)-body-json-jq)\s+?(.*?)\s*$/)
+      rwbodyBox.push({ type: `http-${type}-jq`, regex, value })
+    }
 
     if (/\s((request|response)-body-(json-(add|del|replace)|replace-regex))\s/.test(x)) {
       let [_, regex, __, httpType, action, ___, suffix] = x.match(
@@ -546,43 +555,79 @@ if (binaryInfo != null && binaryInfo.length > 0) {
       let newSuffixArray = []
       if (action === 'json-del') {
         if (suffix) {
-          newSuffixArray = suffixArray.map(item => (/\\x20/.test(item) ? `${item.replace(/\\x20/g, ' ')}` : item))
+          newSuffixArray = suffixArray.map(item => {
+            return parseLoonKey(item)
+          })
         }
       } else {
         for (let index = 0; index < suffixArray.length; index += 2) {
           const key = suffixArray[index]
-          const value = suffixArray[index + 1]
+          let value = suffixArray[index + 1]
 
           if (value != null) {
             newSuffixArray.push([
-              /\\x20/.test(key) ? `${key.replace(/\\x20/g, ' ')}` : key,
-              /\\x20/.test(value) ? `${value.replace(/\\x20/g, ' ')}` : value,
+              parseLoonKey(key),
+              ['json-add', 'json-replace'].includes(action) ? parseLoonValue(value) : parseLoonKey(value),
             ])
           }
         }
       }
       const jsurl = 'https://raw.githubusercontent.com/Script-Hub-Org/Script-Hub/main/scripts/body-rewrite.js'
-      const jstype = `http-${httpType}`
+      let jstype = `http-${httpType}`
       const jsptn = regex
       let args = [[action, newSuffixArray]]
 
-      const index = jsBox.findIndex(i => i.jsurl === jsurl && i.jstype === jstype && i.jsptn === jsptn)
-      if (index === -1) {
-        jsBox.push({
-          jsname: `body_rewrite_${y}`,
-          jstype,
-          jsptn,
-          jsurl,
-          rebody: true,
-          size: -1,
-          timeout: '30',
-          jsarg: encodeURIComponent(JSON.stringify(args)),
-          ori: x,
-          num: y,
-        })
+      if (jqEnabled && isSurgeiOS) {
+        if (action === 'json-add') {
+          newSuffixArray.forEach(item => {
+            const paths = parseJsonPath(item[0])
+            rwbodyBox.push({
+              type: `${jstype}-jq`,
+              regex: jsptn,
+              value: `'setpath(${JSON.stringify(paths)}; ${JSON.stringify(item[1])})'`,
+            })
+          })
+        } else if (action === 'json-del') {
+          newSuffixArray.forEach(item => {
+            const paths = parseJsonPath(item)
+            rwbodyBox.push({ type: `${jstype}-jq`, regex: jsptn, value: `'delpaths([${JSON.stringify(paths)}])'` })
+          })
+        } else if (action === 'json-replace') {
+          newSuffixArray.forEach(item => {
+            const paths = parseJsonPath(item[0])
+            const parant = [...paths]
+            const last = parant.pop()
+            rwbodyBox.push({
+              type: `${jstype}-jq`,
+              regex: jsptn,
+              value: `'if (getpath(${JSON.stringify(parant)}) | has(${
+                /^\d+$/.test(last) ? last : `"${last}"`
+              })) then (setpath(${JSON.stringify(paths)}; ${JSON.stringify(item[1])})) else . end'`,
+            })
+          })
+        } else {
+          newSuffixArray = newSuffixArray.map(item => item.join(' '))
+          rwbodyBox.push({ type: jstype, regex: jsptn, value: newSuffixArray.join(' ') })
+        }
       } else {
-        let jsargs = JSON.parse(decodeURIComponent(jsBox[index].jsarg))
-        jsBox[index].jsarg = encodeURIComponent(JSON.stringify([...jsargs, args[0]]))
+        const index = jsBox.findIndex(i => i.jsurl === jsurl && i.jstype === jstype && i.jsptn === jsptn)
+        if (index === -1) {
+          jsBox.push({
+            jsname: `body_rewrite_${y}`,
+            jstype,
+            jsptn,
+            jsurl,
+            rebody: true,
+            size: -1,
+            timeout: '30',
+            jsarg: encodeURIComponent(JSON.stringify(args)),
+            ori: x,
+            num: y,
+          })
+        } else {
+          let jsargs = JSON.parse(decodeURIComponent(jsBox[index].jsarg))
+          jsBox[index].jsarg = encodeURIComponent(JSON.stringify([...jsargs, args[0]]))
+        }
       }
     }
 
@@ -601,22 +646,16 @@ if (binaryInfo != null && binaryInfo.length > 0) {
         if (/\s(response-)?header-del\s/.test(prefix)) {
           for (let index = 0; index < suffixArray.length; index++) {
             const key = suffixArray[index]
-            newSuffixArray.push(`${/\\x20/.test(key) ? `"${key.replace(/\\x20/g, ' ')}"` : key}`)
+            newSuffixArray.push(`'${parseLoonKey(key)}'`)
           }
         } else if (/\s(response-)?header-replace-regex\s/.test(prefix)) {
           for (let index = 0; index < suffixArray.length; index += 3) {
             const key = suffixArray[index]
-            const value = `${
-              /\\x20/.test(suffixArray[index + 1])
-                ? `"${suffixArray[index + 1].replace(/\\x20/g, ' ')}"`
-                : suffixArray[index + 1]
-            } ${
-              /\\x20/.test(suffixArray[index + 2])
-                ? `"${suffixArray[index + 2].replace(/\\x20/g, ' ')}"`
-                : suffixArray[index + 2]
-            }`
+            const value = `${`'${parseLoonKey(suffixArray[index + 1])}'`} ${`'${parseLoonKey(
+              suffixArray[index + 2]
+            )}'`}`
             if (value != null) {
-              newSuffixArray.push(`${key} ${value}`)
+              newSuffixArray.push(`'${parseLoonKey(key)}' ${value}`)
             }
           }
         } else {
@@ -624,7 +663,7 @@ if (binaryInfo != null && binaryInfo.length > 0) {
             const key = suffixArray[index]
             const value = suffixArray[index + 1]
             if (value != null) {
-              newSuffixArray.push(`${key} ${/\\x20/.test(value) ? `"${value.replace(/\\x20/g, ' ')}"` : value}`)
+              newSuffixArray.push(`'${parseLoonKey(key)}' '${parseLoonKey(value)}'`)
             }
           }
         }
@@ -770,31 +809,33 @@ if (binaryInfo != null && binaryInfo.length > 0) {
           }
         } //for
       }
-
-      jsBox.push({
-        mark,
-        noteK,
-        jsname,
-        img,
-        jstype,
-        jsptn,
-        jsurl,
-        rebody,
-        proto,
-        size,
-        ability,
-        updatetime,
-        timeout,
-        jsarg,
-        cronexp,
-        wakesys,
-        tilesicon,
-        tilescolor,
-        eventname,
-        engine,
-        ori: x,
-        num: y,
-      })
+      // 注释不加
+      if (!/^(#|;|\/\/)\s*/.test(x)) {
+        jsBox.push({
+          mark,
+          noteK,
+          jsname,
+          img,
+          jstype,
+          jsptn,
+          jsurl,
+          rebody,
+          proto,
+          size,
+          ability,
+          updatetime,
+          timeout,
+          jsarg,
+          cronexp,
+          wakesys,
+          tilesicon,
+          tilescolor,
+          eventname,
+          engine,
+          ori: x,
+          num: y,
+        })
+      }
     } //脚本解析结束
 
     //qx脚本解析
@@ -2026,7 +2067,7 @@ function getMockInfo(x, mark, y) {
   switch (targetApp) {
     case 'surge-module':
       if (mockbase64 && datapath) {
-        const e = '暂不支持远程 base64'
+        const e = `暂不支持远程 base64:\n${x}`
         console.log(e)
         shNotify(e)
       } else {
@@ -2208,6 +2249,55 @@ async function http(url, opts = {}) {
     }
     throw new Error(info)
   }
+}
+function parseJsonPath(_path) {
+  const path = _path.trim()
+  const output = []
+  const regex = /\.?([^\.\[\]]+)|\[(['"])(.*?)\2\]|\[(\d+)\]/g
+  let match
+
+  while ((match = regex.exec(path)) !== null) {
+    if (match[1] !== undefined) {
+      // 匹配点符号或初始键
+      output.push(match[1])
+    } else if (match[3] !== undefined) {
+      // 匹配带引号的括号表示法
+      output.push(match[3])
+    } else if (match[4] !== undefined) {
+      // 数组索引，转换为整数
+      output.push(parseInt(match[4], 10))
+    }
+  }
+  return output
+}
+
+// Surge 现在支持使用 ' 或 " 来包裹字段。当使用 ' 时，" 为合法字符，反之亦然
+
+// Loon JQ 表达式 单引号包裹
+// 1. 必须用单引号包裹
+// 2. 无脑用单引号把 jq 表达式取出来, 里面是啥就是啥
+
+// Loon json-replace 处理对象时是跟 json-add 一样的，处理数组时不一样(3K 会改)
+// 123 是 "123"
+// "123" 是 "\"123\""
+// a 是 "a"
+// "a" 是 "\"a\""
+function parseLoonKey(v) {
+  return v.replace(/\\x20/g, ' ')
+}
+// 123 是 123
+// "123" 是 "123"
+// a 是 "a"
+// "a" 是 "a"
+// 由于在解析配置是用空格分割各个参数，如果配置的参数中有空格，请使用\x20代替
+function parseLoonValue(_v) {
+  let v = _v.replace(/\\x20/g, ' ')
+  if (/^\d+$/.test(v)) {
+    v = parseInt(v)
+  } else {
+    v = v.replace(/^"(.*?)"$/, '$1')
+  }
+  return v
 }
 function done(...args) {
   $.log(`⏱ 总耗时：${Math.round(((Date.now() - script_start) / 1000) * 100) / 100} 秒`)
